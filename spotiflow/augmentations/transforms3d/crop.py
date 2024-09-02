@@ -2,7 +2,7 @@ from typing import Tuple
 
 import torch
 import torchvision.transforms.functional as tvf
-from iohub.ngff import ImageArray
+import dask.array as da
 
 from ..transforms.base import BaseAugmentation
 from ..transforms.utils import _filter_points_idx
@@ -38,8 +38,8 @@ class Crop3D(BaseAugmentation):
 
         # Crop volume
         img_c = img[..., cz:cz+self.size[0], cy:cy+self.size[1], cx:cx+self.size[2]]
-        if isinstance(img_c, ImageArray):
-            img_c = torch.from_numpy(img_c.numpy())
+        if isinstance(img_c, da.Array):
+            img_c = torch.from_numpy(img_c.compute())
 
 
         # # Crop image

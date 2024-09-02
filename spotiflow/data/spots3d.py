@@ -10,7 +10,8 @@ import tifffile
 import torch
 from iohub import open_ome_zarr
 from iohub.ngff import ImageArray
-from iohub.zarr import open_ome_zarr
+import dask.array as da
+
 from skimage import io
 from torch.utils.data import Dataset
 from tqdm.auto import tqdm
@@ -33,7 +34,7 @@ def imread(path: Union[Path, str]) -> Union[np.ndarray, ImageArray]:
             mode="r",
             layout="auto",
         ) as ds:
-            return ds[0]  # lazy Zarr array for the raw image in the first position
+            return da.from_zarr(ds[0])[0].transpose(1,2,3,0)  # lazy Zarr array for the raw image in the first position
     else:
         return io.imread(path)
 
@@ -42,8 +43,10 @@ class Spots3DDataset(SpotsDataset):
     def __getitem__(self, idx: int) -> Dict:
         img, centers = self.images[idx], self._centers[idx]
 
-        if not isinstance(img, ImageArray):
+        if not isinstance(img, da.Array):
             img = torch.from_numpy(img.copy()).unsqueeze(0)  # Add B dimension
+        else:
+            img = da.expand_dims(img, 0)
         centers = torch.from_numpy(centers.copy()).unsqueeze(0)  # Add B dimension
 
 
@@ -51,7 +54,7 @@ class Spots3DDataset(SpotsDataset):
         if isinstance(img, torch.Tensor) and img.ndim == 4:
             img = img.unsqueeze(1) # Add C dimension
 
-        img, centers = self.augmenter(img, centers)
+        img, centers = self.augmenter(img.transpose(0,4,1,2,3), centers)
         img, centers = img.squeeze(0), centers.squeeze(0)  # Remove B dimension
 
         if self._compute_flow:
@@ -93,7 +96,7 @@ class Spots3DDataset(SpotsDataset):
         augmenter: Optional[Callable] = None,
         downsample_factors: Sequence[int] = (1,),
         sigma: float = 1.0,
-        image_extensions: Sequence[str] = ("tif", "tiff", "png", "jpg", "jpeg", ".zarr"),
+        image_extensions: Sequence[str] = ("tif", "tiff", "png", "jpg", "jpeg", "zarr"),
         mode: str = "max",
         max_files: Optional[int] = None,
         compute_flow: bool = False,
